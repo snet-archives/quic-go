@@ -686,10 +686,20 @@ func (h *cryptoSetup) Get1RTTOpener() (ShortHeaderOpener, error) {
 	return h.aead, nil
 }
 
+type keyingMaterialExporter interface {
+	ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error)
+}
+
 func (h *cryptoSetup) ConnectionState() ConnectionState {
+	connState := h.conn.ConnectionState()
+	ekm := connState.ExportKeyingMaterial
+	if exporter, ok := h.conn.(keyingMaterialExporter); ok {
+		ekm = exporter.ExportKeyingMaterial
+	}
 	return ConnectionState{
-		ConnectionState: h.conn.ConnectionState(),
-		Used0RTT:        h.used0RTT.Load(),
+		ConnectionState:      connState,
+		Used0RTT:             h.used0RTT.Load(),
+		ExportKeyingMaterial: ekm,
 	}
 }
 

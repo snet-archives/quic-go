@@ -240,4 +240,15 @@ type ConnectionState struct {
 	Version Version
 	// GSO says if generic segmentation offload is used.
 	GSO bool
+
+	ekm func(label string, context []byte, length int) ([]byte, error)
+}
+
+// ExportKeyingMaterial returns length bytes of exported key material as defined
+// in RFC 5705, delegating to uTLS when ChromeParrot is enabled.
+func (cs ConnectionState) ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error) {
+	if cs.ekm != nil {
+		return cs.ekm(label, context, length)
+	}
+	return cs.TLS.ExportKeyingMaterial(label, context, length)
 }

@@ -234,6 +234,14 @@ func (c *utlsQUICConn) ConnectionState() tls.ConnectionState {
 	}
 }
 
+func (c *utlsQUICConn) ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error) {
+	s := c.conn.ConnectionState()
+	if !s.HandshakeComplete {
+		return nil, errors.New("quic: ExportKeyingMaterial called before TLS handshake completed")
+	}
+	return s.ExportKeyingMaterial(label, context, length)
+}
+
 func utlsEncryptionLevel(l tls.QUICEncryptionLevel) utls.QUICEncryptionLevel {
 	switch l {
 	case tls.QUICEncryptionLevelInitial:

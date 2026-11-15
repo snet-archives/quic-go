@@ -804,6 +804,7 @@ func (c *Conn) ConnectionState() ConnectionState {
 	cs := c.cryptoStreamHandler.ConnectionState()
 	c.connState.TLS = cs.ConnectionState
 	c.connState.Used0RTT = cs.Used0RTT
+	c.connState.ekm = cs.ExportKeyingMaterial
 	if c.peerParams != nil {
 		c.connState.SupportsDatagrams.Remote = c.supportsDatagrams()
 		c.connState.SupportsStreamResetPartialDelivery.Remote = c.peerParams.EnableResetStreamAt

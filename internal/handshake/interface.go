@@ -56,7 +56,8 @@ type ShortHeaderSealer interface {
 
 type ConnectionState struct {
 	tls.ConnectionState
-	Used0RTT bool
+	Used0RTT             bool
+	ExportKeyingMaterial func(label string, context []byte, length int) ([]byte, error)
 }
 
 // EventKind is the kind of handshake event.
