@@ -242,6 +242,16 @@ func (s *Server) decreaseConnCount() {
 
 // ServeQUICConn serves a single QUIC connection.
 func (s *Server) ServeQUICConn(conn *quic.Conn) error {
+	return s.serveQUICConn(conn, nil, nil)
+}
+
+// ServeQUICConnWithInitial serves a single QUIC connection using optional
+// pre-accepted unidirectional and bidirectional initial streams.
+func (s *Server) ServeQUICConnWithInitial(conn *quic.Conn, initialUni *quic.ReceiveStream, initialBidi *quic.Stream) error {
+	return s.serveQUICConn(conn, initialUni, initialBidi)
+}
+
+func (s *Server) serveQUICConn(conn *quic.Conn, initialUni *quic.ReceiveStream, initialBidi *quic.Stream) error {
 	s.mutex.Lock()
 	if s.closed {
 		s.mutex.Unlock()
@@ -254,7 +264,7 @@ func (s *Server) ServeQUICConn(conn *quic.Conn) error {
 	s.connCount.Add(1)
 	defer s.decreaseConnCount()
 
-	return s.handleConn(conn)
+	return s.handleConnWithInitial(conn, initialUni, initialBidi)
 }
 
 // ServeListener serves an existing QUIC listener.
@@ -474,6 +484,10 @@ func (s *Server) newRawServerConn(conn *quic.Conn) (*RawServerConn, *quic.SendSt
 // handleConn handles the HTTP/3 exchange on a QUIC connection.
 // It blocks until all HTTP handlers for all streams have returned.
 func (s *Server) handleConn(conn *quic.Conn) error {
+	return s.handleConnWithInitial(conn, nil, nil)
+}
+
+func (s *Server) handleConnWithInitial(conn *quic.Conn, initialUni *quic.ReceiveStream, initialBidi *quic.Stream) error {
 	hconn, ctrlStr, qlogger, err := s.newRawServerConn(conn)
 	if err != nil {
 		return err
@@ -481,6 +495,9 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
+		if initialUni != nil {
+			go hconn.HandleUnidirectionalStream(initialUni)
+		}
 		for {
 			str, err := conn.AcceptUniStream(context.Background())
 			if err != nil {
@@ -497,11 +514,18 @@ func (s *Server) handleConn(conn *quic.Conn) error {
 	// It's the client's responsibility to decide which requests are eligible for 0-RTT.
 	ctx := s.graceCtx
 	for {
-		// The context used here is:
-		// * before graceful shutdown: s.graceCtx
-		// * after graceful shutdown: s.closeCtx
-		// This allows us to keep accepting (and resetting) streams after graceful shutdown has started.
-		str, err := conn.AcceptStream(ctx)
+		var str *quic.Stream
+		var err error
+		if initialBidi != nil {
+			str = initialBidi
+			initialBidi = nil
+		} else {
+			// The context used here is:
+			// * before graceful shutdown: s.graceCtx
+			// * after graceful shutdown: s.closeCtx
+			// This allows us to keep accepting (and resetting) streams after graceful shutdown has started.
+			str, err = conn.AcceptStream(ctx)
+		}
 		if err != nil {
 			// the underlying connection was closed (by either side)
 			if conn.Context().Err() != nil {
